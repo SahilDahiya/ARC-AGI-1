@@ -1,0 +1,71 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug eval_baseline",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/eval_baseline.py",
+      "args": [
+        "--split",
+        "all",
+        "--baseline",
+        "copy_input",
+        "--output",
+        "results/baseline_copy_input.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Debug train_neural_baseline (smoke)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/train_neural_baseline.py",
+      "args": [
+        "--config",
+        "conf/train_baseline.yaml",
+        "optim.epochs=1",
+        "model.d_model=96",
+        "model.n_heads=4",
+        "model.n_layers=2",
+        "optim.batch_size=32",
+        "runtime.num_workers=0",
+        "output.checkpoint_path=results/neural_baseline/smoke_model.pt",
+        "output.metrics_path=results/neural_baseline/smoke_train_metrics.json",
+        "output.eval_path=results/neural_baseline/smoke_eval_metrics.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "CUDA_LAUNCH_BLOCKING": "1"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Debug eval_neural_baseline",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/eval_neural_baseline.py",
+      "args": [
+        "--checkpoint",
+        "results/neural_baseline/smoke_model.pt",
+        "--split",
+        "all",
+        "--output",
+        "results/neural_baseline/smoke_eval_from_ckpt.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

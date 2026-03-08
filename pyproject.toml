@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arc-agi-1"
+version = "0.1.0"
+description = "Solve ARC-AGI-1"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "accelerate>=1.12.0",
+    "arckit>=1.0.1",
+    "numpy>=2.3.0",
+    "omegaconf>=2.3.0",
+    "torch>=2.8.0",
+    "tqdm>=4.67.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
