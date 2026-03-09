@@ -24,3 +24,12 @@
 - exact deletion criteria
 - the ADR/task that tracks its removal
 - Default stance across the app: delete old-state compatibility code rather than carrying it forward.
+
+## Experiment Tracking
+
+- Use `scripts/run_experiment.py` as the default entrypoint for local experiments.
+- Every run must produce one immutable run directory under `results/<family>/<run_id>/`.
+- Every run must append one row to `results/registry.jsonl`, including failed runs.
+- Do not overwrite prior run artifacts or reuse run ids.
+- Use `scripts/list_experiments.py` to inspect recent run history before starting new experiments.
+- Update `docs/experiments.md` only for runs that materially change project direction.

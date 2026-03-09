@@ -38,7 +38,7 @@ Build a reproducible Test-Time Training (TTT) system for ARC-AGI-1 that improves
 1. Done: establish a no-TTT baseline scoring harness.
 2. Done: add first neural no-TTT baseline training/evaluation pipeline.
 3. Next: harden the neural baseline into a credible non-TTT reference.
-4. In progress: move to a task-conditioned model that can use train demonstrations.
+4. In progress: replace weak pooled demo-context conditioning with richer task-conditioned interaction between demonstrations and query.
 5. Then: add TTT loop with parameter-efficient updates (for example LoRA/adapters/BitFit).
 6. Run controlled ablations and track deltas vs baseline.
 7. Harden reproducibility and prepare a clean report of best configuration.
@@ -73,13 +73,65 @@ Build a reproducible Test-Time Training (TTT) system for ARC-AGI-1 that improves
   - evaluation solved tasks: 0/400
   - training pair accuracy: 1/416
   - artifacts in `results/task_conditioned_baseline/`
+- Stronger task-conditioned run (4 epochs, `d_model=96`, 2 layers):
+  - training solved tasks: 0/400
+  - evaluation solved tasks: 0/400
+  - training pair accuracy: 1/416
+  - evaluation pair accuracy: 0/419
+  - loss fell from `2.79` to `1.56`, but exact-match metrics did not move
+  - implication: the current pooled demo-context formulation is not enough; next work should improve demo-query interaction and decoding, not just train longer
 - Neural smoke run (1 epoch, smaller model):
   - training solved tasks: 1/400 (0.25%)
   - evaluation solved tasks: 0/400 (0.00%)
   - artifacts in `results/neural_baseline/`
 - Phase-based improvement roadmap documented in `docs/model-improvement-phases.md`
+- Local experiment registry implemented:
+  - append-only registry at `results/registry.jsonl`
+  - one immutable run directory per experiment under `results/<family>/<run_id>/`
+  - canonical launcher in `scripts/run_experiment.py`
+  - inspection CLI in `scripts/list_experiments.py`
+
+## Experiment Tracking
+
+Every experiment run must be recorded locally, even if it fails or gets interrupted.
+
+Canonical process:
+1. Launch runs through `scripts/run_experiment.py`.
+2. Let the launcher create a unique run directory under `results/<family>/<run_id>/`.
+3. Keep all run-local artifacts in that run directory only.
+4. Use `scripts/list_experiments.py` to inspect recent history before starting new work.
+5. Update `docs/experiments.md` only for runs that materially affect project direction.
+
+Registry contract:
+- `results/registry.jsonl` is append-only.
+- Do not overwrite prior run directories.
+- Record failed runs as failed runs; do not delete them.
+- The launcher snapshots command metadata, git state, stdout, and resolved OmegaConf config when available.
 
 ## Runbook
+
+Canonical experiment launcher:
+
+```bash
+.venv/bin/python scripts/run_experiment.py \
+  --family task_conditioned_baseline \
+  --label poolctx_e04_d96_l2 \
+  -- \
+  .venv/bin/python scripts/train_task_conditioned_baseline.py \
+  --config conf/train_task_conditioned.yaml \
+  optim.epochs=4 \
+  model.d_model=96 \
+  model.n_heads=4 \
+  model.n_layers=2 \
+  optim.batch_size=16 \
+  runtime.num_workers=0
+```
+
+List recent experiment records:
+
+```bash
+.venv/bin/python scripts/list_experiments.py --limit 10
+```
 
 Heuristic baseline evaluation:
 
@@ -155,14 +207,18 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 - `conf/`: baseline training config (`train_baseline.yaml`)
 - `conf/train_task_conditioned.yaml`: task-conditioned baseline config
 - `src/arc_agi_1/`: loaders, baselines, dataset, model, training utilities
+- `src/arc_agi_1/experiments.py`: local experiment registry and launcher helpers
 - `scripts/eval_baseline.py`: heuristic baseline evaluator
 - `scripts/train_neural_baseline.py`: neural baseline trainer
 - `scripts/eval_neural_baseline.py`: checkpoint evaluator
 - `scripts/train_task_conditioned_baseline.py`: task-conditioned baseline trainer
+- `scripts/run_experiment.py`: canonical experiment launcher
+- `scripts/list_experiments.py`: registry inspection CLI
 - `scripts/show_task.py`: terminal ARC task viewer using `arckit`
 - `tests/`: scorer/baseline behavior tests
-- `results/`: JSON run artifacts
+- `results/`: local experiment registry and run artifacts (git-ignored)
 - `docs/`: experiment and decision logs
+- `guides/experiment-workflow.md`: experiment process for future sessions
 
 ## Documentation Policy (Must Evolve With Project)
 
@@ -177,8 +233,9 @@ Update triggers:
 
 Required updates:
 1. Update this README when goals, scope, plan, or constraints change.
-2. Append every meaningful run to `docs/experiments.md`.
-3. Record important architectural/process decisions in `docs/decisions.md`.
+2. Register every run locally in `results/registry.jsonl` via `scripts/run_experiment.py`.
+3. Append every meaningful run to `docs/experiments.md`.
+4. Record important architectural/process decisions in `docs/decisions.md`.
 
 Definition of "done" for any milestone:
 - code change merged
@@ -191,3 +248,4 @@ Definition of "done" for any milestone:
 - [Decision Log](docs/decisions.md)
 - [Model Improvement Phases](docs/model-improvement-phases.md)
 - [ARC Data Model Guide](guides/arc-data-model.md)
+- [Experiment Workflow Guide](guides/experiment-workflow.md)

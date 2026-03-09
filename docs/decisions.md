@@ -77,3 +77,11 @@ Record high-impact decisions and why they were made.
 - Decision: Encode demo inputs, demo outputs, and the query input with a shared grid encoder; pool demo representations into a single context vector; add that context to query predictions for output size and output cells.
 - Consequences: Provides a minimal end-to-end task-conditioned baseline now, while leaving room for a richer architecture later.
 - Supersedes: none
+
+### [D-009] Use a local append-only experiment registry as the canonical run record
+- Date: 2026-03-08
+- Status: accepted
+- Context: Metrics JSON files and Markdown notes alone are too easy to lose track of once runs multiply, especially across multiple coding-agent sessions.
+- Decision: Record every experiment through `scripts/run_experiment.py`, writing one immutable run directory under `results/<family>/<run_id>/` plus an append-only row in `results/registry.jsonl`. Reserve `docs/experiments.md` for the subset of runs that materially change project direction.
+- Consequences: Slight workflow overhead, but stronger reproducibility, clearer failure accounting, and a single canonical place to inspect recent local runs.
+- Supersedes: none
