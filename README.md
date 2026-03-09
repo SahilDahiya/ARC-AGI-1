@@ -38,7 +38,7 @@ Build a reproducible Test-Time Training (TTT) system for ARC-AGI-1 that improves
 1. Done: establish a no-TTT baseline scoring harness.
 2. Done: add first neural no-TTT baseline training/evaluation pipeline.
 3. Next: harden the neural baseline into a credible non-TTT reference.
-4. Next: move to a task-conditioned model that can use train demonstrations.
+4. In progress: move to a task-conditioned model that can use train demonstrations.
 5. Then: add TTT loop with parameter-efficient updates (for example LoRA/adapters/BitFit).
 6. Run controlled ablations and track deltas vs baseline.
 7. Harden reproducibility and prepare a clean report of best configuration.
@@ -64,6 +64,15 @@ Build a reproducible Test-Time Training (TTT) system for ARC-AGI-1 that improves
 - Phase 1 data pipeline started:
   - task-conditioned samples can now bundle train demonstrations with a query pair
   - task-conditioned dataset tensors are available in `src/arc_agi_1/dataset.py`
+- First task-conditioned model path implemented:
+  - `ArcTaskConditionedModel` added in `src/arc_agi_1/model.py`
+  - task-conditioned training/evaluation helpers added in `src/arc_agi_1/training.py`
+  - task-conditioned trainer added in `scripts/train_task_conditioned_baseline.py`
+- Task-conditioned smoke run (1 epoch, smaller model):
+  - training solved tasks: 0/400
+  - evaluation solved tasks: 0/400
+  - training pair accuracy: 1/416
+  - artifacts in `results/task_conditioned_baseline/`
 - Neural smoke run (1 epoch, smaller model):
   - training solved tasks: 1/400 (0.25%)
   - evaluation solved tasks: 0/400 (0.00%)
@@ -106,6 +115,22 @@ PYTHONPATH=src .venv/bin/python scripts/eval_neural_baseline.py \
   --output results/neural_baseline/smoke_eval_from_ckpt.json
 ```
 
+Task-conditioned baseline training (smoke run example):
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/train_task_conditioned_baseline.py \
+  --config conf/train_task_conditioned.yaml \
+  optim.epochs=1 \
+  model.d_model=64 \
+  model.n_heads=4 \
+  model.n_layers=1 \
+  optim.batch_size=16 \
+  runtime.num_workers=0 \
+  output.checkpoint_path=results/task_conditioned_baseline/smoke_model.pt \
+  output.metrics_path=results/task_conditioned_baseline/smoke_train_metrics.json \
+  output.eval_path=results/task_conditioned_baseline/smoke_eval_metrics.json
+```
+
 Show a task in the terminal:
 
 ```bash
@@ -128,10 +153,12 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 
 - `data/`: ARC-AGI-1 task files (`training`, `evaluation`)
 - `conf/`: baseline training config (`train_baseline.yaml`)
+- `conf/train_task_conditioned.yaml`: task-conditioned baseline config
 - `src/arc_agi_1/`: loaders, baselines, dataset, model, training utilities
 - `scripts/eval_baseline.py`: heuristic baseline evaluator
 - `scripts/train_neural_baseline.py`: neural baseline trainer
 - `scripts/eval_neural_baseline.py`: checkpoint evaluator
+- `scripts/train_task_conditioned_baseline.py`: task-conditioned baseline trainer
 - `scripts/show_task.py`: terminal ARC task viewer using `arckit`
 - `tests/`: scorer/baseline behavior tests
 - `results/`: JSON run artifacts
@@ -163,3 +190,4 @@ Definition of "done" for any milestone:
 - [Experiment Log](docs/experiments.md)
 - [Decision Log](docs/decisions.md)
 - [Model Improvement Phases](docs/model-improvement-phases.md)
+- [ARC Data Model Guide](guides/arc-data-model.md)

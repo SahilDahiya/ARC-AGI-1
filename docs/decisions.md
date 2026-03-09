@@ -69,3 +69,11 @@ Record high-impact decisions and why they were made.
 - Decision: Use small from-scratch ARC-specific architectures as the default path; downloaded pretrained models, if any, are comparison branches rather than the main plan.
 - Consequences: More architecture work up front, but tighter control over data format, task conditioning, and TTT cost.
 - Supersedes: none
+
+### [D-008] First task-conditioned model pools demonstration context into query prediction
+- Date: 2026-03-08
+- Status: accepted
+- Context: We need a first task-conditioned baseline quickly, without jumping straight to a more complex cross-attention or autoregressive architecture.
+- Decision: Encode demo inputs, demo outputs, and the query input with a shared grid encoder; pool demo representations into a single context vector; add that context to query predictions for output size and output cells.
+- Consequences: Provides a minimal end-to-end task-conditioned baseline now, while leaving room for a richer architecture later.
+- Supersedes: none
