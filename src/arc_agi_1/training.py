@@ -14,9 +14,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from arc_agi_1.data import Grid, TaskMap
-from arc_agi_1.dataset import decode_grid, encode_grid
-from arc_agi_1.model import ArcGridBaselineModel
+from arc_agi_1.data import Grid, Task, TaskMap
+from arc_agi_1.dataset import TaskConditionedSample, decode_grid, encode_grid
+from arc_agi_1.model import ArcGridBaselineModel, ArcTaskConditionedModel
 
 
 @dataclass(slots=True)
@@ -147,6 +147,78 @@ def predict_single_output(
     return decode_grid(pred_cells, height=pred_h, width=pred_w)
 
 
+def _task_conditioned_sample_from_query(task: Task, query_index: int) -> TaskConditionedSample:
+    """Build an inference-time task-conditioned sample for one test pair."""
+    demo_pairs = list(task["train"])
+    if not demo_pairs:
+        raise ValueError("Task-conditioned inference requires at least one train demonstration.")
+
+    return TaskConditionedSample(
+        task_id="inference",
+        split="inference",
+        query_source="test",
+        query_index=query_index,
+        demo_pairs=demo_pairs,
+        query_pair=task["test"][query_index],
+    )
+
+
+@torch.no_grad()
+def predict_task_conditioned_output(
+    model: ArcTaskConditionedModel,
+    task: Task,
+    *,
+    query_index: int,
+    device: torch.device,
+    max_grid: int,
+    max_demos: int,
+    pad_color: int,
+) -> Grid:
+    """Predict one task test output using train demonstrations as context."""
+    model.eval()
+
+    sample = _task_conditioned_sample_from_query(task, query_index)
+    if len(sample.demo_pairs) > max_demos:
+        raise ValueError(f"Task needs {len(sample.demo_pairs)} demos, exceeds max_demos={max_demos}.")
+
+    demo_input_grids = torch.full((1, max_demos, max_grid, max_grid), pad_color, dtype=torch.long, device=device)
+    demo_input_masks = torch.zeros((1, max_demos, max_grid, max_grid), dtype=torch.bool, device=device)
+    demo_output_grids = torch.zeros((1, max_demos, max_grid, max_grid), dtype=torch.long, device=device)
+    demo_output_masks = torch.zeros((1, max_demos, max_grid, max_grid), dtype=torch.bool, device=device)
+    demo_mask = torch.zeros((1, max_demos), dtype=torch.bool, device=device)
+
+    for demo_index, pair in enumerate(sample.demo_pairs):
+        encoded_input, input_mask = encode_grid(pair["input"], max_grid=max_grid, pad_color=pad_color)
+        encoded_output, output_mask = encode_grid(pair["output"], max_grid=max_grid, pad_color=0)
+        demo_input_grids[0, demo_index] = encoded_input.to(device)
+        demo_input_masks[0, demo_index] = input_mask.to(device)
+        demo_output_grids[0, demo_index] = encoded_output.to(device)
+        demo_output_masks[0, demo_index] = output_mask.to(device)
+        demo_mask[0, demo_index] = True
+
+    query_input_grid, query_input_mask = encode_grid(
+        sample.query_pair["input"],
+        max_grid=max_grid,
+        pad_color=pad_color,
+    )
+    query_input_grid = query_input_grid.unsqueeze(0).to(device)
+    query_input_mask = query_input_mask.unsqueeze(0).to(device)
+
+    out = model(
+        demo_input_grids=demo_input_grids,
+        demo_input_masks=demo_input_masks,
+        demo_output_grids=demo_output_grids,
+        demo_output_masks=demo_output_masks,
+        demo_mask=demo_mask,
+        query_input_grid=query_input_grid,
+        query_input_mask=query_input_mask,
+    )
+    pred_h = int(torch.argmax(out["height_logits"], dim=-1).item()) + 1
+    pred_w = int(torch.argmax(out["width_logits"], dim=-1).item()) + 1
+    pred_cells = torch.argmax(out["cell_logits"][0], dim=-1).to(dtype=torch.long).cpu()
+    return decode_grid(pred_cells, height=pred_h, width=pred_w)
+
+
 @torch.no_grad()
 def evaluate_task_solve_rate(
     model: ArcGridBaselineModel,
@@ -171,6 +243,58 @@ def evaluate_task_solve_rate(
                 pair["input"],
                 device=device,
                 max_grid=max_grid,
+                pad_color=pad_color,
+            )
+            expected = pair["output"]
+            total_pairs += 1
+            if predicted == expected:
+                exact_pair_matches += 1
+            else:
+                task_solved = False
+        if task_solved:
+            solved_tasks += 1
+
+    solve_rate = solved_tasks / total_tasks if total_tasks else 0.0
+    pair_accuracy = exact_pair_matches / total_pairs if total_pairs else 0.0
+
+    return TaskEvalMetrics(
+        split=split,
+        solved_tasks=solved_tasks,
+        total_tasks=total_tasks,
+        solve_rate=solve_rate,
+        exact_pair_matches=exact_pair_matches,
+        total_pairs=total_pairs,
+        pair_accuracy=pair_accuracy,
+    )
+
+
+@torch.no_grad()
+def evaluate_task_conditioned_solve_rate(
+    model: ArcTaskConditionedModel,
+    tasks: TaskMap,
+    *,
+    split: str,
+    device: torch.device,
+    max_grid: int,
+    max_demos: int,
+    pad_color: int,
+) -> TaskEvalMetrics:
+    """Evaluate strict ARC solved-task rate for a task-conditioned model."""
+    solved_tasks = 0
+    total_tasks = len(tasks)
+    exact_pair_matches = 0
+    total_pairs = 0
+
+    for task in tasks.values():
+        task_solved = True
+        for query_index, pair in enumerate(task["test"]):
+            predicted = predict_task_conditioned_output(
+                model,
+                task,
+                query_index=query_index,
+                device=device,
+                max_grid=max_grid,
+                max_demos=max_demos,
                 pad_color=pad_color,
             )
             expected = pair["output"]

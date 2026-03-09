@@ -1,0 +1,38 @@
+seed: 7
+
+data:
+  root: data
+  train_split: training
+  eval_split: evaluation
+  train_query_sets: [train, test]
+
+model:
+  max_grid: 30
+  max_demos: 10
+  num_colors: 10
+  pad_color: 10
+  d_model: 192
+  n_heads: 6
+  n_layers: 6
+  dropout: 0.1
+
+optim:
+  lr: 3e-4
+  weight_decay: 0.01
+  batch_size: 8
+  epochs: 8
+  size_loss_weight: 0.3
+
+eval:
+  every_n_epochs: 1
+
+runtime:
+  device: auto
+  amp: true
+  num_workers: 2
+  log_every: 25
+
+output:
+  checkpoint_path: results/task_conditioned_baseline/model.pt
+  metrics_path: results/task_conditioned_baseline/train_metrics.json
+  eval_path: results/task_conditioned_baseline/eval_metrics.json
