@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, TypedDict
 
 import torch
 from torch import Tensor
@@ -31,6 +31,36 @@ class TaskConditionedSample:
     query_index: int
     demo_pairs: list[Pair]
     query_pair: Pair
+
+
+class PairBatchRow(TypedDict):
+    input_grid: Tensor
+    input_mask: Tensor
+    output_grid: Tensor
+    output_mask: Tensor
+    output_h_idx: int
+    output_w_idx: int
+    task_id: str
+    source: str
+    pair_index: int
+
+
+class TaskBatchRow(TypedDict):
+    demo_input_grids: Tensor
+    demo_input_masks: Tensor
+    demo_output_grids: Tensor
+    demo_output_masks: Tensor
+    demo_mask: Tensor
+    demo_count: int
+    query_input_grid: Tensor
+    query_input_mask: Tensor
+    output_grid: Tensor
+    output_mask: Tensor
+    output_h_idx: int
+    output_w_idx: int
+    task_id: str
+    query_source: str
+    query_index: int
 
 
 def grid_shape(grid: Grid) -> tuple[int, int]:
@@ -158,7 +188,7 @@ def load_task_conditioned_samples(
     return build_task_conditioned_samples(tasks, split=split, query_sets=query_sets)
 
 
-class ArcPairDataset(Dataset[dict[str, object]]):
+class ArcPairDataset(Dataset[PairBatchRow]):
     """Torch dataset producing fixed-size tensors for ARC pair supervision."""
 
     def __init__(self, samples: Sequence[PairSample], *, max_grid: int = 30, pad_color: int = 10) -> None:
@@ -169,7 +199,7 @@ class ArcPairDataset(Dataset[dict[str, object]]):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, index: int) -> dict[str, object]:
+    def __getitem__(self, index: int) -> PairBatchRow:
         sample = self.samples[index]
 
         input_grid, input_mask = encode_grid(
@@ -197,7 +227,7 @@ class ArcPairDataset(Dataset[dict[str, object]]):
         }
 
 
-class ArcTaskDataset(Dataset[dict[str, object]]):
+class ArcTaskDataset(Dataset[TaskBatchRow]):
     """Torch dataset for task-conditioned ARC supervision."""
 
     def __init__(
@@ -216,7 +246,7 @@ class ArcTaskDataset(Dataset[dict[str, object]]):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, index: int) -> dict[str, object]:
+    def __getitem__(self, index: int) -> TaskBatchRow:
         sample = self.samples[index]
         if len(sample.demo_pairs) > self.max_demos:
             raise ValueError(
@@ -281,37 +311,37 @@ class ArcTaskDataset(Dataset[dict[str, object]]):
         }
 
 
-def collate_pair_batch(batch: list[dict[str, object]]) -> dict[str, object]:
+def collate_pair_batch(batch: list[PairBatchRow]) -> dict[str, object]:
     """Collate function for ArcPairDataset."""
     return {
-        "input_grid": torch.stack([row["input_grid"] for row in batch]),  # type: ignore[arg-type]
-        "input_mask": torch.stack([row["input_mask"] for row in batch]),  # type: ignore[arg-type]
-        "output_grid": torch.stack([row["output_grid"] for row in batch]),  # type: ignore[arg-type]
-        "output_mask": torch.stack([row["output_mask"] for row in batch]),  # type: ignore[arg-type]
+        "input_grid": torch.stack([row["input_grid"] for row in batch]),
+        "input_mask": torch.stack([row["input_mask"] for row in batch]),
+        "output_grid": torch.stack([row["output_grid"] for row in batch]),
+        "output_mask": torch.stack([row["output_mask"] for row in batch]),
         "output_h_idx": torch.tensor([row["output_h_idx"] for row in batch], dtype=torch.long),
         "output_w_idx": torch.tensor([row["output_w_idx"] for row in batch], dtype=torch.long),
-        "task_ids": [str(row["task_id"]) for row in batch],
-        "sources": [str(row["source"]) for row in batch],
-        "pair_indices": [int(row["pair_index"]) for row in batch],
+        "task_ids": [row["task_id"] for row in batch],
+        "sources": [row["source"] for row in batch],
+        "pair_indices": [row["pair_index"] for row in batch],
     }
 
 
-def collate_task_batch(batch: list[dict[str, object]]) -> dict[str, object]:
+def collate_task_batch(batch: list[TaskBatchRow]) -> dict[str, object]:
     """Collate function for ArcTaskDataset."""
     return {
-        "demo_input_grids": torch.stack([row["demo_input_grids"] for row in batch]),  # type: ignore[arg-type]
-        "demo_input_masks": torch.stack([row["demo_input_masks"] for row in batch]),  # type: ignore[arg-type]
-        "demo_output_grids": torch.stack([row["demo_output_grids"] for row in batch]),  # type: ignore[arg-type]
-        "demo_output_masks": torch.stack([row["demo_output_masks"] for row in batch]),  # type: ignore[arg-type]
-        "demo_mask": torch.stack([row["demo_mask"] for row in batch]),  # type: ignore[arg-type]
+        "demo_input_grids": torch.stack([row["demo_input_grids"] for row in batch]),
+        "demo_input_masks": torch.stack([row["demo_input_masks"] for row in batch]),
+        "demo_output_grids": torch.stack([row["demo_output_grids"] for row in batch]),
+        "demo_output_masks": torch.stack([row["demo_output_masks"] for row in batch]),
+        "demo_mask": torch.stack([row["demo_mask"] for row in batch]),
         "demo_count": torch.tensor([row["demo_count"] for row in batch], dtype=torch.long),
-        "query_input_grid": torch.stack([row["query_input_grid"] for row in batch]),  # type: ignore[arg-type]
-        "query_input_mask": torch.stack([row["query_input_mask"] for row in batch]),  # type: ignore[arg-type]
-        "output_grid": torch.stack([row["output_grid"] for row in batch]),  # type: ignore[arg-type]
-        "output_mask": torch.stack([row["output_mask"] for row in batch]),  # type: ignore[arg-type]
+        "query_input_grid": torch.stack([row["query_input_grid"] for row in batch]),
+        "query_input_mask": torch.stack([row["query_input_mask"] for row in batch]),
+        "output_grid": torch.stack([row["output_grid"] for row in batch]),
+        "output_mask": torch.stack([row["output_mask"] for row in batch]),
         "output_h_idx": torch.tensor([row["output_h_idx"] for row in batch], dtype=torch.long),
         "output_w_idx": torch.tensor([row["output_w_idx"] for row in batch], dtype=torch.long),
-        "task_ids": [str(row["task_id"]) for row in batch],
-        "query_sources": [str(row["query_source"]) for row in batch],
-        "query_indices": [int(row["query_index"]) for row in batch],
+        "task_ids": [row["task_id"] for row in batch],
+        "query_sources": [row["query_source"] for row in batch],
+        "query_indices": [row["query_index"] for row in batch],
     }
